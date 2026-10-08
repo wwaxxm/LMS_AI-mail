@@ -1,0 +1,15 @@
+# Secrets : ne jamais versionner
+.env
+.env.*
+*.key
+*.pem
+secrets/
+credentials*.json
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Dépendances et fichiers temporaires
+node_modules/
+*.log

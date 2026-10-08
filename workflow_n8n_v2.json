@@ -1,0 +1,296 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "includeSpamTrash": false,
+          "readStatus": "unread"
+        }
+      },
+      "id": "7301847c-bf45-4a85-8a2c-592ebd4ce0f3",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        1472,
+        1728
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Ue9pl2iiNKmo5P4I",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"gpt-6-luna\",\n  reasoning_effort: \"none\",\n  max_completion_tokens: 400,\n  messages: [\n    {\n      role: \"system\",\n      content: \"Tu es un assistant de tri d'emails pour une petite entreprise. Analyse l'email fourni et réponds UNIQUEMENT avec un objet JSON valide (aucun texte, aucun bloc markdown autour), contenant exactement ces clés : is_client (true si c'est une vraie demande client ou prospect, false si c'est du spam, une notification automatique ou une newsletter), urgency (faible, normale ou haute), summary (résumé en une phrase, 15 mots maximum), action_needed (ce que le client attend concrètement en une phrase, chaîne vide si is_client vaut false).\"\n    },\n    {\n      role: \"user\",\n      content: `Expéditeur : ${$json.from?.value?.[0]?.address || $json.from || ''}\\nSujet : ${$json.subject || ''}\\n\\nContenu du mail :\\n${$json.text || $json.textPlain || $json.snippet || ''}`\n    }\n  ],\n  response_format: {\n    type: \"json_schema\",\n    json_schema: {\n      name: \"tri_email\",\n      strict: true,\n      schema: {\n        type: \"object\",\n        properties: {\n          is_client: { type: \"boolean\" },\n          urgency: { type: \"string\", enum: [\"faible\", \"normale\", \"haute\"] },\n          summary: { type: \"string\" },\n          action_needed: { type: \"string\" }\n        },\n        required: [\"is_client\", \"urgency\", \"summary\", \"action_needed\"],\n        additionalProperties: false\n      }\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "3847db16-cab8-4a9d-8497-54ef53c82067",
+      "name": "Appel OpenAI - Tri",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1696,
+        1728
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Clé OpenAI Header"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const trigger = $('Gmail Trigger').item.json;\nlet raw = '';\ntry {\n  raw = $json.choices[0].message.content || '';\n} catch (e) {\n  raw = '';\n}\n\n// Extraction robuste du JSON\nlet parsed;\ntry {\n  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    parsed = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error(\"Pas de JSON trouvé\");\n  }\n} catch (e) {\n  parsed = { is_client: true, urgency: 'normale', summary: 'À vérifier manuellement (analyse IA échouée)', action_needed: '' };\n}\n\n// --- NETTOYAGE GMAIL ---\n\n// 1. Extraire UNIQUEMENT l'adresse email pure (enlever le \"Nom <...>\")\nconst rawFrom = trigger.From || trigger.from || '';\nlet fromAddress = rawFrom;\nif (rawFrom && rawFrom.value && rawFrom.value[0] && rawFrom.value[0].address) {\n    fromAddress = rawFrom.value[0].address;\n} else if (typeof rawFrom === 'string') {\n    const match = rawFrom.match(/<([^>]+)>/);\n    if (match) {\n        fromAddress = match[1]; // Ne garde que ce qui est entre < >\n    }\n}\nfromAddress = fromAddress.trim(); // Supprime les espaces autour\n\n// 2. Nettoyer le Thread ID de tout espace invisible\nconst cleanThreadId = (trigger.threadId || '').trim();\n\nconst bodyText = trigger.text || trigger.textPlain || trigger.snippet || '';\nconst originalSubject = trigger.Subject || trigger.subject || '';\n\nreturn {\n  json: {\n    is_client: parsed.is_client === true,\n    urgency: parsed.urgency || 'normale',\n    summary: parsed.summary || '',\n    action_needed: parsed.action_needed || '',\n    originalSubject: originalSubject,\n    originalFrom: fromAddress,\n    originalBody: bodyText,\n    threadId: cleanThreadId\n  }\n};"
+      },
+      "id": "9afaf9ad-2ee5-4168-a33d-97364c8cacc8",
+      "name": "Parser le tri",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        1728
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.is_client }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "ca96a682-20ae-4754-b5f0-58bfabac8941",
+      "name": "Est-ce un client ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2144,
+        1728
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"gpt-6.1-sol\",\n  reasoning_effort: \"low\",\n  max_completion_tokens: 2000,\n  messages: [\n    {\n      role: \"system\",\n      content: \"Tu es l'assistant email d'une petite entreprise. Rédige un brouillon de réponse professionnelle, chaleureuse et concise en français, sans placeholder entre crochets, adaptée à la demande du client ci-dessous. Réponds UNIQUEMENT avec le texte de la réponse : pas de JSON, pas de guillemets autour, pas de texte d'introduction du type voici la réponse.\"\n    },\n    {\n      role: \"user\",\n      content: `Sujet : ${$('Parser le tri').item.json.originalSubject}\\nRésumé de la demande : ${$('Parser le tri').item.json.summary}\\nCe que le client attend : ${$('Parser le tri').item.json.action_needed}\\n\\nMail original :\\n${$('Parser le tri').item.json.originalBody}`\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "55b189c9-b783-4652-8dbf-9331a5aaaa4d",
+      "name": "Appel OpenAI - Rédaction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2576,
+        1568
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Clé OpenAI Header"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const triage = $('Parser le tri').item.json;\nlet replyText = '';\ntry {\n  replyText = ($json.choices[0].message.content || '').trim();\n} catch (e) {\n  replyText = '';\n}\n\nconst draftBody = `[Résumé interne — ${(triage.urgency || 'normale').toUpperCase()}] ${triage.summary || ''}\\n\\n---\\n\\n${replyText}`;\n\nreturn {\n  json: {\n    draftBody,\n    subject: `Re : ${triage.originalSubject || ''}`,\n    to: triage.originalFrom || '',\n    threadId: triage.threadId || ''\n  }\n};"
+      },
+      "id": "c56d6fb1-f421-4234-9102-ffd64afeef47",
+      "name": "Préparer le brouillon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2784,
+        1568
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.draftBody }}",
+        "options": {
+          "sendTo": "=={{ $json.to }}"
+        }
+      },
+      "id": "c412c808-fb3b-4c7b-b39a-2fd3db919478",
+      "name": "Créer le brouillon Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3008,
+        1568
+      ],
+      "webhookId": "453bb576-8349-44e6-80ef-52beea507ac4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Ue9pl2iiNKmo5P4I",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "db4b7562-7251-4b62-8635-7b4735409f4e",
+      "name": "Ignorer (Spam Newsletter)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2368,
+        1888
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2368,
+        1712
+      ],
+      "id": "b5c2c040-afa9-4b2a-9651-c0c1264c04a9",
+      "name": "Wait",
+      "webhookId": "937b0410-287a-47fb-8712-6607c145c5ae"
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Appel OpenAI - Tri",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appel OpenAI - Tri": {
+      "main": [
+        [
+          {
+            "node": "Parser le tri",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser le tri": {
+      "main": [
+        [
+          {
+            "node": "Est-ce un client ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Est-ce un client ?": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignorer (Spam Newsletter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appel OpenAI - Rédaction": {
+      "main": [
+        [
+          {
+            "node": "Préparer le brouillon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer le brouillon": {
+      "main": [
+        [
+          {
+            "node": "Créer le brouillon Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Appel OpenAI - Rédaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "21aa46a1ce76808a1d7c675ad85112c25c29c52948fa3ee15450adfde5df8c77"
+  }
+}
