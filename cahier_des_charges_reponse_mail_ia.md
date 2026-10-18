@@ -9,7 +9,7 @@
 ## 1. Contexte et objectif
 
 ### 1.1 Contexte
-Le porteur du projet a déjà construit une première version fonctionnelle d'un assistant qui lit les nouveaux mails d'une boîte Gmail, les classe avec une IA, puis prépare un brouillon de réponse. Cette version d'origine tourne sur **n8n** avec **Gemini** comme modèle (voir Annexe A : JSON complet). La version de travail `workflow_n8n_v2.json` a été migrée vers **OpenAI** (voir 8.3) ; le fichier `workflow_n8n_v1_original.json` reste la référence Gemini, à ne pas modifier.
+Le porteur du projet a déjà construit une première version fonctionnelle d'un assistant qui lit les nouveaux mails d'une boîte Gmail, les classe avec une IA, puis prépare un brouillon de réponse. Cette version d'origine tourne sur **n8n** avec **Gemini** comme modèle (voir Annexe A : JSON complet). La version de travail `workflow_n8n_v2.json` a été migrée vers **Ollama** (modèle local `llama3.2:3b`, voir 8.3) pour le développement et les tests ; le fichier `workflow_n8n_v1_original.json` reste la référence Gemini, à ne pas modifier.
 
 L'ambition est maintenant de :
 1. fiabiliser et sécuriser ce workflow ;
@@ -56,15 +56,15 @@ L'ambition est maintenant de :
 
 ## 3. Existant : analyse du workflow n8n actuel
 
-*L'analyse ci-dessous décrit le workflow d'origine (Gemini). Dans `workflow_n8n_v2.json`, seuls les deux appels IA changent : les nœuds s'appellent « Appel OpenAI - Tri » et « Appel OpenAI - Rédaction ». Les anomalies A1 à A10 y sont encore présentes (phase 0 du plan).*
+*L'analyse ci-dessous décrit le workflow d'origine (Gemini). Dans `workflow_n8n_v2.json`, seuls les deux appels IA changent : les nœuds s'appellent « Appel Ollama - Tri » et « Appel Ollama - Rédaction ». Les anomalies A1 à A10 y sont encore présentes (phase 0 du plan).*
 
 ### 3.1 Enchaînement des nœuds
 1. **Gmail Trigger** : interroge Gmail toutes les minutes, mails non lus, hors spam/corbeille.
-2. **Appel Gemini - Tri** (v2 : **Appel OpenAI - Tri**) : demande un JSON `{is_client, urgency, summary, action_needed}`. Origine : `gemini-3.7-flash`, 400 tokens max. v2 : `gpt-6-luna`, `reasoning_effort: none`, sortie JSON stricte (`json_schema`), `max_completion_tokens` 400. 5 essais, 5 s entre essais dans les deux cas.
+2. **Appel Gemini - Tri** (v2 : **Appel Ollama - Tri**) : demande un JSON `{is_client, urgency, summary, action_needed}`. Origine : `gemini-3.7-flash`, 400 tokens max. v2 : `llama3.2:3b` via `http://ollama:11434/v1/chat/completions`, sans credential, `response_format` json_schema (support par ce modèle non testé), `max_tokens` 400, timeout 180000 ms. 5 essais, 5 s entre essais dans les deux cas.
 3. **Parser le tri** : extrait le JSON de la réponse. En cas d'échec, valeurs par défaut (`is_client: true`, « À vérifier manuellement »). Nettoie l'adresse de l'expéditeur et le threadId.
 4. **Est-ce un client ?** : si oui, vers Wait ; sinon, vers « Ignorer (Spam Newsletter) ».
 5. **Wait** : valeur 30 (unité à vérifier).
-6. **Appel Gemini - Rédaction** (v2 : **Appel OpenAI - Rédaction**) : génère le texte de réponse. Origine : 1024 tokens max. v2 : `gpt-6.1-sol`, `reasoning_effort: low`, `max_completion_tokens` 2000 (les tokens de raisonnement comptent dans cette limite, d'où une valeur plus haute). 5 essais.
+6. **Appel Gemini - Rédaction** (v2 : **Appel Ollama - Rédaction**) : génère le texte de réponse. Origine : 1024 tokens max. v2 : `llama3.2:3b`, `max_tokens` 2000, timeout 180000 ms (premier appel lent : chargement du modèle). 5 essais.
 7. **Préparer le brouillon** : assemble un corps `[Résumé interne — URGENCE] ... --- réponse`, sujet `Re : ...`, destinataire, threadId.
 8. **Créer le brouillon Gmail** : crée le brouillon.
 
@@ -73,7 +73,7 @@ L'ambition est maintenant de :
 - Aucun outil ni action donnés au modèle (il ne peut que classer et rédiger).
 - Repli prudent si l'analyse IA échoue : le mail est traité comme un vrai client à vérifier.
 - Sortie JSON forcée (`responseMimeType`) et extraction robuste.
-- Clé API gérée via un credential n8n.
+- Clé API gérée via un credential n8n (v1 Gemini). En v2 avec Ollama local, aucune clé n'est nécessaire ; en production avec un service payant, la clé restera dans un credential n8n.
 
 ### 3.3 Anomalies et manques identifiés
 | Réf. | Constat | Priorité |
@@ -88,7 +88,7 @@ L'ambition est maintenant de :
 | A8 | Pas de contrôle si la réponse générée est vide ; pas de workflow d'erreur après les 5 essais. | Moyenne |
 | A9 | Pas de journal d'audit, pas d'interrupteur d'urgence, pas de plafond de coûts. | Moyenne |
 | A10 | Réponse envoyée à l'adresse `From` ; `Reply-To` non géré. | Basse |
-| A11 | Identifiants OpenAI `gpt-6-luna` et `gpt-6.1-sol` et paramètre `reasoning_effort` pris dans la documentation officielle mais **jamais testés** dans n8n. Au premier appel, si erreur « modèle introuvable » ou « paramètre non supporté », corriger d'après la documentation. | À vérifier |
+| A11 | Appels Ollama (`llama3.2:3b`, URL `http://ollama:11434/v1/chat/completions`) **jamais testés** dans n8n : support de `response_format` json_schema, temps de réponse sur CPU (ARM, sans GPU dans Docker), qualité en français et résistance aux injections. Si erreur de format : retirer `response_format` du nœud de tri (le parseur a un repli) ; si URL injoignable : voir AGENTS.md (adresses de secours). Ollama joignable et modèle installé : vérifiés. | À vérifier |
 
 ---
 
@@ -107,7 +107,7 @@ L'ambition est maintenant de :
 | EF-09 | Gérer les erreurs : réponse vide, JSON invalide, API en échec, refus du modèle → mail marqué pour traitement humain + alerte | À créer |
 | EF-10 | Journal d'audit : mail reçu, catégorie, décision, brouillon créé, horodatage | À créer |
 | EF-11 | Interrupteur d'urgence pour tout arrêter en un clic | À créer |
-| EF-12 | Plafond de dépenses OpenAI de 10 €/mois avec alerte | À créer |
+| EF-12 | Plafond de dépenses avec alerte : sans objet en test local (Ollama gratuit) ; si la production utilise un service payant (par ex. OpenAI), plafond de 10 €/mois à réévaluer avant le pilote | À définir selon le fournisseur de production |
 | EF-13 | Base de connaissances spécifique à chaque client | À créer |
 
 ### Options commercialisables
@@ -163,8 +163,8 @@ L'ambition est maintenant de :
 | Domaine | Exigence |
 |---|---|
 | Fiabilité | Alerte au porteur **avant** le client en cas de panne, via un canal séparé de l'accès Gmail ; 100 % des erreurs signalées ; aucun brouillon vide créé |
-| Performance | Brouillon disponible quelques minutes après réception (délai à définir avec le client) |
-| Coûts | Plafond OpenAI de 10 €/mois ; modèles économiques pour le tri |
+| Performance | Brouillon disponible quelques minutes après réception (délai à définir avec le client). À mesurer : un modèle local sur CPU peut être beaucoup plus lent |
+| Coûts | Test local gratuit (Ollama) ; en production avec un service payant : plafond de 10 €/mois à réévaluer, modèles économiques pour le tri |
 | Maintenabilité | Workflow documenté, versionné, jeu de tests rejouable après chaque modification |
 | Observabilité | Journal d'audit consultable, alertes d'erreur |
 | Réversibilité | Désactivation immédiate possible, export des données du client |
@@ -196,27 +196,29 @@ L'ambition est maintenant de :
 **Recommandation** : finaliser et sécuriser la version n8n, la faire valider par un client pilote, puis évaluer le passage au code si le nombre de clients augmente.
 
 ### 8.3 Choix des modèles
-**Décision prise** : OpenAI pour la v2, avec `gpt-6-luna` pour le tri et `gpt-6.1-sol` pour la rédaction. Gemini reste la référence v1 uniquement.
+**Décision prise** : Ollama en local (`llama3.2:3b`) pour le développement et les tests de la v2, car l'API OpenAI du porteur n'avait pas de crédit. Le fournisseur de **production** n'est pas décidé. OpenAI (`gpt-6-luna`, `gpt-6.1-sol`) reste une option étudiée. Gemini reste la référence v1 uniquement.
 
 | Usage | Modèle | Remarque |
 |---|---|---|
 | Version d'origine (v1) | `gemini-3.7-flash` (tri et rédaction) | Conservée comme référence |
-| **Tri (v2)** | **OpenAI `gpt-6-luna`**, `reasoning_effort: none` | Modèle « efficace pour les tâches ciblées à fort volume » selon la documentation OpenAI ; 0,10 $ / 0,50 $ par million de tokens (entrée / sortie) ; sortie JSON stricte |
-| **Rédaction (v2)** | **OpenAI `gpt-6.1-sol`**, `reasoning_effort: low` | Modèle « équilibré vitesse / coût / intelligence » ; 2 $ / 10 $ par million de tokens ; ne supporte pas `reasoning_effort: none` |
-| Variante économique | `gpt-6-luna` aussi pour la rédaction | Environ 20 fois moins cher ; à comparer sur de faux mails, éventuellement inspirés de mails réels anonymisés, sur un compte Gmail de test, jamais sur la vraie boîte |
+| **Tri et rédaction (v2, tests)** | **Ollama `llama3.2:3b`** (2,0 Go) | Gratuit, local, données non envoyées à un tiers ; petit modèle : qualité en français et résistance aux injections à mesurer ; lent sur CPU |
+| Option de production A | Modèle plus gros hébergé avec Ollama sur un serveur | Confidentialité maximale ; coût du serveur ; à tester |
+| Option de production B | OpenAI `gpt-6-luna` (tri, `reasoning_effort: none`) et `gpt-6.1-sol` (rédaction, `reasoning_effort: low`) | Prix relevés le 9 octobre 2026 : 0,10 $ / 0,50 $ et 2 $ / 10 $ par million de tokens (entrée / sortie), à revérifier. `max_completion_tokens` inclut les tokens de raisonnement. Variante : `gpt-6-luna` aussi pour la rédaction |
 | Autres fournisseurs | Claude Haiku 4.5 / Sonnet 5.5 par exemple | Possible, hors périmètre de la v2 |
 | **Construction du projet** | Modèle proposé par **Codex** (à vérifier dans l'outil) | Distinct du modèle qui fait tourner le robot |
 
-La logique reste identique avec n'importe quel fournisseur : seuls l'URL, les en-têtes et le format de requête changent. Chez OpenAI, l'authentification se fait par un en-tête `Authorization: Bearer <clé>` (credential « Header Auth » dans n8n). Prix et identifiants relevés dans la documentation officielle OpenAI le 9 octobre 2026 : à revérifier avant toute mise en production.
+**Environnement local** : n8n et Ollama sont deux conteneurs Docker du même réseau (dossier `LMS_AI_Agency`, hors du dossier du projet : Codex ne peut pas lire son `compose.yml`). Depuis n8n, Ollama est joint à `http://ollama:11434` (secours : `http://lms_ai_agency_ollama:11434`, ou `http://host.docker.internal:11434`) ; jamais `localhost`. L'API compatible OpenAI d'Ollama accepte `max_tokens` ; `reasoning_effort` et `max_completion_tokens` ne sont pas garantis. L'authentification est ignorée en local.
 
-**Estimation de coût (calcul approximatif, à confirmer par un relevé réel)** : pour une trentaine de mails clients par jour, le tri avec `gpt-6-luna` coûte de l'ordre de quelques centimes par mois, et la rédaction avec `gpt-6.1-sol` de l'ordre de quelques dollars à une dizaine de dollars par mois, tokens de raisonnement compris. Le poste principal est la rédaction.
+La logique du workflow reste identique avec n'importe quel fournisseur : seuls l'URL, les en-têtes et le format de requête changent (chez OpenAI : `Authorization: Bearer <clé>`, credential « Header Auth » dans n8n).
 
-Cette estimation ne couvre pas le volume retenu pour le pilote, d'environ 150 mails reçus/jour. Elle doit être réévaluée à partir de coûts réels mesurés sur de faux mails représentatifs, sur un compte Gmail de test, avant le pilote.
+**Coûts** : nuls en test local. Pour OpenAI, estimation approximative à confirmer par un relevé réel : pour une trentaine de mails clients par jour, le tri coûte quelques centimes par mois et la rédaction avec `gpt-6.1-sol` de l'ordre de quelques dollars à une dizaine de dollars par mois, tokens de raisonnement compris. Le pilote prévoit environ 150 mails reçus/jour : réévaluer sur des coûts réels mesurés sur de faux mails représentatifs, sur un compte Gmail de test, avant le pilote.
+
+**Performance** : le PC de développement est un ARM (Snapdragon X, 32 Go de RAM) ; dans Docker, Ollama n'utilise pas le GPU/NPU, donc le CPU. Le temps de réponse est à mesurer (le premier appel charge le modèle). Si la limite mémoire de WSL2 est trop basse, l'ajuster.
 
 ### 8.4 Facturation et usage de Codex
 - Codex CLI se connecte soit avec un **compte ChatGPT** (formules Plus, Pro, Team, Edu ou Enterprise, selon la documentation officielle), soit avec une **clé API** OpenAI (configuration supplémentaire).
 - **Construire** le projet = usage de Codex via ton compte ChatGPT ou ta clé API.
-- **Faire tourner** le robot en production = appels d'API au fournisseur du modèle retenu (OpenAI dans la v2), facturés au token. La clé API du workflow relève d'un compte API OpenAI, distinct de l'accès à Codex : vérifier la facturation sur platform.openai.com. Ne pas dépendre d'un abonnement pour la production.
+- **Faire tourner** le robot : en test, Ollama local, gratuit. En production, selon le fournisseur retenu : serveur Ollama (coût d'hébergement) ou API payante facturée au token. Si c'est OpenAI, la clé API du workflow relève d'un compte API distinct de l'accès à Codex : vérifier la facturation sur platform.openai.com. Ne pas dépendre d'un abonnement pour la production.
 - Les limites d'usage et les tarifs actuels n'ont pas été vérifiés ici : voir les pages officielles OpenAI (documentation Codex et page des tarifs).
 
 ---
@@ -290,7 +292,7 @@ Règles :
 |---|---|---|
 | 0 | Corrections rapides : A1, A2, A3, A4 | Workflow stable |
 | 1 | Sécurité du contenu : catégorie `sensitive`, délimiteurs, règle anti-invention, base de connaissances | Workflow v2 |
-| 2 | Fiabilité : journal, contrôle de sortie, interrupteur, plafond OpenAI de 10 €/mois avec alerte ; proposer 2 ou 3 options de canal d'alerte séparé puis faire valider le choix, sans droit d'envoi pour l'accès Gmail (ES-01) | Workflow v3 |
+| 2 | Fiabilité : journal, contrôle de sortie, interrupteur, plafond de coûts avec alerte (sans objet avec Ollama local ; 10 €/mois si service payant) ; proposer 2 ou 3 options de canal d'alerte séparé puis faire valider le choix, sans droit d'envoi pour l'accès Gmail (ES-01) | Workflow v3 |
 | 3 | Tests : jeu de tests T1 à T13 passé et documenté | Rapport de tests |
 | 4 | Avant le pilote : décider de l'hébergeur, du pays de stockage et des sauvegardes (EJ-02, EJ-03, ES-08). Pilote chez un client, environ 150 mails/jour, en mode brouillon uniquement ; critères : au moins 70 % de brouillons utilisables avec peu de retouches, aucun envoi non validé, aucun brouillon pour un mail sensible, 100 % des erreurs signalées | Retour d'expérience |
 | 5 | Packaging commercial : contrat, DPA, documentation, formation, tarification | Offre prête à vendre |
@@ -311,7 +313,8 @@ Règles :
 | Réponse erronée envoyée à un client | Brouillons uniquement, relecture humaine, règle anti-invention |
 | Injection de prompt via un mail | Aucun outil, délimiteurs, escalade des cas sensibles, tests piégés |
 | Fuite de données | Isolation par client, secrets protégés, droits minimaux |
-| Coûts d'API qui explosent | Plafond, alertes, modèles économiques |
+| Coûts d'API qui explosent (si service payant) | Plafond, alertes, modèles économiques |
+| Petit modèle local peu fiable (qualité, injections) | Tests T1 à T13, escalade humaine, comparaison avec un modèle plus gros avant la production |
 | Panne silencieuse | Alertes, journal |
 | Non-conformité RGPD | DPA, minimisation, avis juridique |
 | Dépendance à un fournisseur de modèle | Architecture indépendante du modèle |
@@ -327,10 +330,10 @@ Règles :
 5. **Langues** : français et anglais ; réponse dans la langue du mail. Toute autre langue = escalade humaine sans brouillon (T7).
 6. **LMS_AI_Agency** : produit indépendant, hors périmètre du projet de réponse aux mails. L'Annexe B est conservée pour mémoire, sans rattachement prévu.
 7. **Expérience en code du porteur** : intermédiaire.
-8. **Modèle IA** : OpenAI retenu pour la v2 (`gpt-6-luna` pour le tri, `gpt-6.1-sol` pour la rédaction). Gemini = référence v1 uniquement. Les appels restent à tester dans n8n avec de faux mails (A11) et les conditions de traitement des données d'OpenAI restent à vérifier (EJ-02).
+8. **Modèle IA** : Ollama local (`llama3.2:3b`) pour le développement et les tests de la v2. Fournisseur de production non décidé (Ollama sur serveur, OpenAI ou autre) : à trancher après mesure de la qualité, de la vitesse et du coût ; les conditions de traitement des données du fournisseur retenu restent à vérifier (EJ-02). Gemini = référence v1 uniquement. Les appels restent à tester dans n8n avec de faux mails (A11).
 9. **Tests** : uniquement de faux mails, y compris des mails inspirés de mails réels mais anonymisés, sur un compte Gmail de test. Jamais la vraie boîte ; « exemples » désigne ces données de test.
 10. **Alertes** : canal séparé ; l'accès Gmail n'a pas le droit d'envoyer, y compris les alertes (ES-01). En phase 2, proposer 2 ou 3 options puis faire valider le choix du canal.
-11. **Budget** : plafond OpenAI de 10 €/mois.
+11. **Budget** : sans objet en test local ; si la production utilise un service payant, plafond de 10 €/mois à réévaluer avant le pilote.
 12. **Réussite du pilote** : au moins 70 % de brouillons utilisables avec peu de retouches ; aucun envoi non validé ; aucun brouillon pour un mail sensible ; 100 % des erreurs signalées.
 
 ---
@@ -361,7 +364,7 @@ ni dans Git ; ne lis jamais mes fichiers .env ni rien hors du dossier du projet.
 
 # Annexe A : JSON complet du workflow n8n d'origine (Gemini)
 
-Version d'origine, conservée telle quelle. La version migrée vers OpenAI est le fichier `workflow_n8n_v2.json`.
+Version d'origine, conservée telle quelle. La version migrée vers Ollama est le fichier `workflow_n8n_v2.json`.
 
 Ce fichier contient des références à des credentials (pas les clés elles-mêmes), mais ne le publie pas publiquement.
 

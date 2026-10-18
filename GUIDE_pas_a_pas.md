@@ -1,12 +1,12 @@
 # Guide pas à pas (version Codex) : de zéro à un projet vendable
 
-Fichiers fournis : `cahier_des_charges_reponse_mail_ia.md`, `AGENTS.md`, `PLAN.md`, `.gitignore`, `workflow_n8n_v1_original.json` et ce guide.
+Fichiers fournis : `cahier_des_charges_reponse_mail_ia.md`, `AGENTS.md`, `PLAN.md`, `.gitignore`, `workflow_n8n_v1_original.json`, `workflow_n8n_v2.json` (version Ollama) et ce guide.
 `AGENTS.md` remplace l'ancien `CLAUDE.md` : c'est le fichier d'instructions que Codex lit automatiquement avant de travailler.
 
 ---
 
 ## Étape 0 : décider avant de coder
-Remplis le tableau « Décisions prises » dans `PLAN.md` (au minimum : messagerie, installation par client ou service partagé, hébergement de n8n, modèle IA du workflow, langues, volume). Sans ces réponses, Codex fera des hypothèses.
+Remplis le tableau « Décisions prises » dans `PLAN.md` (au minimum : messagerie, installation par client ou service partagé, hébergement de n8n, modèle IA du workflow, langues, volume). Le modèle IA actuel est Ollama local pour les tests ; celui de production reste à décider. Sans ces réponses, Codex fera des hypothèses.
 
 ## Étape 1 : compte et accès
 Codex CLI se connecte de deux façons (source : dépôt officiel github.com/openai/codex) :
@@ -27,29 +27,50 @@ Note : certains guides anciens disent que Windows passe par WSL2. Le README actu
 
 ## Étape 3 : préparer l'environnement de test
 - Un **compte Gmail de test** (jamais ta vraie boîte ni celle d'un client).
-- Une **instance n8n de test** (la tienne, en Docker local).
-- Une **clé API OpenAI** (platform.openai.com), avec un **plafond de dépenses** défini dans les réglages de facturation. Ce compte API est distinct de ton accès à Codex : vérifie la facturation.
+- **n8n et Ollama en Docker local** (dossier `LMS_AI_Agency`, avec son `compose.yml`, hors du dossier du projet). Le workflow v2 utilise le modèle local `llama3.2:3b` : pas de clé API, pas de facture.
 - Entre toi-même les credentials dans n8n. Ne les donne pas à Codex :
   - **Gmail** : connexion OAuth (compte de test).
-  - **OpenAI** : nouveau credential de type **Header Auth**, nom du credential `Clé OpenAI Header`, champ Name = `Authorization`, champ Value = `Bearer ` suivi de ta clé (avec l'espace après Bearer).
-- L'ancien credential « Clé Gemini Header » n'est plus utilisé par la v2 : tu peux le supprimer, et révoquer la clé Gemini si tu ne t'en sers plus.
+  - **IA** : aucun credential pour Ollama.
+- Les anciens credentials « Clé Gemini Header » et « Clé OpenAI Header » ne sont plus utilisés : supprime-les de n8n. **Révoque** aussi les clés Gemini et OpenAI créées pour ce projet (surtout si une clé a déjà été visible sur une capture d'écran ou dans un fichier).
+
+### Vérifier qu'Ollama répond (dans un terminal, une commande par ligne)
+```
+docker ps
+docker exec lms_ai_agency_ollama ollama list
+curl.exe http://localhost:11434/api/tags
+```
+- `docker ps` doit montrer `lms_ai_agency_n8n` et `lms_ai_agency_ollama` à l'état « Up ».
+- `ollama list` doit afficher `llama3.2:3b`. S'il manque : `docker exec lms_ai_agency_ollama ollama pull llama3.2:3b`.
+- `curl.exe` (avec `.exe`, sinon PowerShell lance autre chose) doit répondre avec du JSON listant le modèle.
+
+### Test 1 : le nœud de tri seul (dans n8n, après l'import de l'étape 11)
+Ouvre « Appel Ollama - Tri » et clique sur « Execute step ». Le premier appel peut prendre plusieurs dizaines de secondes (chargement du modèle) : le timeout est réglé sur 180 s. Si l'appel échoue :
+- « connection refused » ou hôte introuvable : remplace l'URL par `http://lms_ai_agency_ollama:11434/v1/chat/completions`, ou par `http://host.docker.internal:11434/v1/chat/completions` si Ollama tourne sur ton PC hors Docker. Jamais `localhost`.
+- erreur sur `response_format` : dis-le à Codex, qui le retirera du nœud de tri (le parseur a un repli).
+
+### Test 2 : la rédaction
+Lance le workflow complet avec un faux mail et vérifie qu'un brouillon apparaît dans le Gmail de test. Note le temps total et les erreurs, et donne-les à Codex. Ces tests sont lents sur CPU : c'est normal.
 
 ## Étape 4 : créer le dossier du projet
 ```
-mon-projet-mail-ia/
-├── AGENTS.md
-├── PLAN.md
-├── cahier_des_charges_reponse_mail_ia.md
-├── workflow_n8n_v1_original.json     (ne jamais modifier)
-├── workflow_n8n_v2.json              (copie de v1, c'est elle qu'on modifie)
-└── .gitignore                        (contient notamment : .env)
+Projets/
+├── mon-projet-mail-ai/               (dossier ouvert avec Codex)
+│   ├── AGENTS.md
+│   ├── PLAN.md
+│   ├── GUIDE_pas_a_pas.md
+│   ├── cahier_des_charges_reponse_mail_ia.md
+│   ├── workflow_n8n_v1_original.json   (Gemini, ne jamais modifier)
+│   ├── workflow_n8n_v2.json            (version Ollama, c'est elle qu'on modifie)
+│   └── .gitignore                      (contient notamment : .env)
+└── LMS_AI_Agency/                    (Docker : compose.yml, n8n + Ollama ; hors projet)
 ```
+Chemin complet : `C:\Users\Utilisateur\Documents\Projets\mon-projet-mail-ai`. Lance toujours Codex depuis `mon-projet-mail-ai`, jamais depuis `LMS_AI_Agency`, pour qu'il ne voie pas ton Docker.
 - **Supprime l'ancien `CLAUDE.md`** s'il est dans ton dossier.
 - **Ne lance pas `/init`** dans Codex : cette commande génère un `AGENTS.md` de départ dans le dossier, et ton fichier existe déjà.
-- Lance `git init` dans le dossier pour pouvoir revenir en arrière.
+- Lance `git init` dans le dossier pour pouvoir revenir en arrière. Sauvegarde sur un dépôt GitHub **privé** (`wwaxxm/LMS_AI-mail`, branche `main`) : vérifie qu'il est bien privé. Commits et `git push` : toi seul, ou sur ton accord explicite.
 
 ## Étape 5 : lancer Codex
-1. Dans le terminal : `cd C:\Users\Utilisateur\Documents\Projets\mon-projet-mail-ia` (adapte au nom réel de ton dossier), puis `codex`.
+1. Dans le terminal : `cd C:\Users\Utilisateur\Documents\Projets\mon-projet-mail-ai`, puis `codex`.
 2. À la première utilisation, choisis **Sign in with ChatGPT** (ou configure ta clé API).
 3. **Vérifie qu'il a bien chargé tes règles** : demande-lui « Cite les règles de AGENTS.md que tu as chargées ». S'il ne les cite pas, vérifie que tu l'as lancé dans le bon dossier.
 4. Pour le choix du modèle, regarde la liste des commandes slash dans l'interface ou la référence CLI (developers.openai.com/codex/cli/reference). Je n'ai pas vérifié ici la commande exacte ni les modèles proposés.
@@ -78,8 +99,10 @@ Réponds à ses questions, mets à jour les décisions dans `PLAN.md`, puis **fe
 ```
 Étape : Phase 0 (corrections rapides).
 Objectif : traiter A1, A2, A3 et A4 de la section 3.3 du cahier des charges.
+Contexte : workflow_n8n_v2.json est déjà migré vers Ollama (llama3.2:3b, nœuds
+« Appel Ollama - ... », aucun credential). Ne change ni le fournisseur ni le modèle.
 Périmètre : modifie uniquement workflow_n8n_v2.json. Ne touche ni aux prompts
-ni à la structure générale du workflow.
+ni aux nœuds « Appel Ollama », ni à la structure générale du workflow.
 
 Méthode :
 1. Relis PLAN.md et la section 3.3.
@@ -89,6 +112,7 @@ Méthode :
    ou de le réduire. Pour A3, propose-moi 2 ou 3 emplacements possibles pour le
    résumé interne, hors du corps du brouillon.
 Critère de fin : les 4 anomalies sont traitées et le JSON reste importable dans n8n.
+Si mes tests Ollama (A11) ne sont pas encore faits, rappelle-le-moi avant de conclure.
 À la fin : résumé « fait / pas fait / à décider », puis mise à jour de PLAN.md.
 ```
 
@@ -118,7 +142,8 @@ Remplis ensuite `base_de_connaissances.md` avec les vraies informations de l'ent
 Étape : Phase 2 (fiabilité).
 Objectif : traiter A8, A9, A10 (exigences EF-09 à EF-12).
 Périmètre : contrôle de la sortie, gestion des erreurs, journal d'audit,
-interrupteur d'urgence, plafond de coûts, Reply-To.
+interrupteur d'urgence, plafond de coûts (sans objet avec Ollama local : propose
+seulement une conception pour le fournisseur de production), Reply-To.
 
 Méthode :
 1. Relis PLAN.md et les sections 4, 7 et 8.
@@ -126,7 +151,8 @@ Méthode :
 3. Mets en place : contrôle « réponse non vide + JSON valide » ; workflow d'erreur
    avec alerte au porteur ; journal (mail reçu, catégorie, décision, brouillon créé,
    horodatage, sans données personnelles inutiles) ; interrupteur d'urgence ;
-   alerte de plafond de coûts ; gestion de Reply-To.
+   alerte de plafond de coûts (à concevoir pour la production, pas pour Ollama) ;
+   gestion de Reply-To.
 Critère de fin : tests T7 à T13 prêts et chaque résultat attendu est clair.
 À la fin : résumé « fait / pas fait / à décider », puis mise à jour de PLAN.md.
 ```
@@ -149,8 +175,8 @@ Tu exécutes et vérifies toi-même les tests dans n8n. Ne te contente pas du co
 ## Étape 11 : importer le workflow dans n8n (à faire toi-même)
 1. Ouvre ton n8n de test dans le navigateur.
 2. Crée un nouveau workflow, ouvre le menu du workflow et choisis l'import depuis un fichier (« Import from File »), puis sélectionne `workflow_n8n_v2.json`.
-3. Ouvre les deux nœuds « Appel OpenAI - Tri » et « Appel OpenAI - Rédaction » et sélectionne le credential `Clé OpenAI Header` (le JSON ne contient que son nom, pas son identifiant, donc n8n peut te le redemander). Vérifie aussi que le nœud Gmail utilise ton credential de **test**.
-   - Au premier test, si l'appel renvoie « modèle introuvable » ou « paramètre non supporté », note le message exact : c'est le point A11, à corriger avec Codex d'après la documentation officielle OpenAI.
+3. Ouvre les deux nœuds « Appel Ollama - Tri » et « Appel Ollama - Rédaction » : l'URL doit être `http://ollama:11434/v1/chat/completions` et l'authentification « None » (aucun credential à choisir). Vérifie aussi que le nœud Gmail utilise ton credential de **test** (n8n peut te le redemander, car le JSON ne contient que son nom).
+   - Fais ensuite les tests 1 et 2 de l'étape 3. Si un appel échoue, note le message exact : c'est le point A11, à corriger avec Codex.
 4. Désactive le workflow tant que tu ne veux pas qu'il tourne sur la boîte de test, et lance un test manuel avec un faux mail.
 
 Je n'ai pas vérifié si Codex peut piloter l'interface de n8n à ta place. Fais cette étape manuellement : c'est aussi plus sûr pour tes identifiants.
@@ -165,7 +191,7 @@ Je n'ai pas vérifié si Codex peut piloter l'interface de n8n à ta place. Fais
 - **Contrat de service** et **clause de responsabilité** (l'IA peut se tromper, le client valide les envois).
 - **DPA** (contrat de sous-traitance RGPD) et liste des sous-traitants avec leurs conditions.
 - Documentation et formation du client.
-- Tarification (installation + abonnement) et gestion des coûts d'API.
+- Tarification (installation + abonnement) et gestion des coûts (serveur ou API selon le fournisseur IA de production).
 - **Fais valider les documents juridiques par un professionnel.** Codex peut préparer des brouillons, pas un avis juridique.
 
 ## Étape 14 : Phase 6, options
@@ -177,7 +203,8 @@ Je n'ai pas vérifié si Codex peut piloter l'interface de n8n à ta place. Fais
 - [ ] Brouillons uniquement, aucun envoi automatique non validé
 - [ ] Mails sensibles escaladés, jamais de réponse générée
 - [ ] Tests T1 à T13 passés et documentés (dont mail piégé et fausse autorité)
-- [ ] Journal, alertes d'erreur, interrupteur d'urgence et plafond de coûts en place
+- [ ] Journal, alertes d'erreur, interrupteur d'urgence et plafond de coûts (si service payant) en place
+- [ ] Fournisseur IA de production choisi et testé (qualité en français, vitesse, résistance aux injections, confidentialité)
 - [ ] Une instance ou des credentials séparés par client, droits Gmail minimaux
 - [ ] Aucune clé dans les fichiers ni dans Git
 - [ ] DPA, contrat, clause de responsabilité validés par un professionnel
@@ -187,7 +214,7 @@ Je n'ai pas vérifié si Codex peut piloter l'interface de n8n à ta place. Fais
 1. Arrête-le et rappelle le périmètre : « Reviens à l'étape [X], tu es sorti du périmètre. »
 2. Si la session est confuse : ferme-la, relance `codex` dans le dossier, et demande-lui de relire PLAN.md.
 3. Garde `AGENTS.md` court et cohérent avec le cahier des charges : un fichier court et précis est plus utile qu'un long fichier de règles vagues.
-4. Vérifie que tu l'as bien lancé depuis `mon-projet-mail-ia` et non depuis `Projets` ou `Documents`.
+4. Vérifie que tu l'as bien lancé depuis `mon-projet-mail-ai` et non depuis `Projets` ou `Documents`.
 
 ## Ce qui reste TOUJOURS à ta charge
 - Les décisions du projet (section 14).
