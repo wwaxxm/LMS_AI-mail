@@ -3,7 +3,7 @@
 > Codex : lis ce fichier en début de session et mets-le à jour à la fin de chaque étape.
 
 ## Prochaine action
-- [ ] Le porteur teste la v2 (Ollama) dans n8n et donne les résultats (voir Phase 0). Ensuite : proposer le plan détaillé de la correction de A1 à A4, puis attendre validation avant exécution.
+- [ ] Le porteur importe la v2 avec la référence explicite pour A4 dans n8n de test et vérifie le rattachement à une vraie conversation du compte de test (véritable `threadId`, sans données fictives épinglées). A1 et A3 sont validés ; confirmer aussi l’absence de Wait (A2). Compléter A11 : création avec Thread ID et temps total ; tests T1 à T13, dont T5 et T6, à exécuter sur de faux mails.
 
 ## Décisions prises (à remplir avec le porteur du projet)
 | Question | Décision | Date |
@@ -25,12 +25,12 @@
 ## Phase 0 : corrections rapides (workflow n8n)
 - [x] Migration Gemini vers OpenAI dans `workflow_n8n_v2.json` (09/10/2026) : abandonnée pour les tests (compte API sans crédit)
 - [x] Migration vers Ollama local dans `workflow_n8n_v2.json` (15/10/2026) : modèle `llama3.2:3b`, URL `http://ollama:11434/v1/chat/completions`, sans credential, timeout 180000 ms, nœuds « Appel Ollama - Tri » et « Appel Ollama - Rédaction ». Ollama joignable vérifié (modèle installé, `/api/tags` répond)
-- [x] A11 partiel (18/10/2026) : test 1 OK (tri : JSON valide avec les 4 clés, `json_schema` accepté par `llama3.2:3b`) ; test 2 : rédaction générée mais de mauvaise qualité en français (mots anglais, phrases bancales, promesse de délai inventée, placeholder `[Votre nom]`). Reste à noter : création du brouillon Gmail (A1 peut le bloquer) et temps total
+- [x] A11 partiel (18/10/2026) : test 1 OK (tri : JSON valide avec les 4 clés, `json_schema` accepté par `llama3.2:3b`) ; test 2 : rédaction générée mais de mauvaise qualité en français (mots anglais, phrases bancales, promesse de délai inventée, placeholder `[Votre nom]`). Création du brouillon Gmail sans Thread ID confirmée ensuite par le porteur (A1 et A3 validés). Restent à vérifier : rattachement au fil (A4) et temps total
 - [ ] Avant la phase 1 : comparer `llama3.2:3b` avec un modèle local plus gros (par ex. `llama3.1:8b` ou `qwen2.5:7b`) et/ou une API payante sur les mêmes faux mails, avec mesure du temps
-- [ ] A1 : corriger `"=={{ $json.to }}"` en un seul `=` (nœud « Créer le brouillon Gmail »)
-- [ ] A2 : vérifier l'unité du nœud Wait (30 quoi ?) et le supprimer ou le réduire à quelques secondes
-- [ ] A3 : retirer le résumé interne du corps du brouillon
-- [ ] A4 : rattacher le brouillon au fil de conversation (threadId), si le nœud le permet
+- [x] A1 : destinataire corrigé en `={{ $json.to }}` (18/10/2026) ; création du brouillon sans Thread ID validée par le porteur dans n8n
+- [x] A2 : Wait supprimé ; branche client raccordée directement à « Appel Ollama - Rédaction » (18/10/2026)
+- [x] A3 : corps limité à la réponse ; résumé conservé dans `internalSummary`, sortie « Préparer le brouillon », uniquement dans les données d’exécution n8n (18/10/2026) ; validé par le porteur dans n8n
+- [ ] A4 : configuration corrigée dans `options.threadId` avec `={{ $('Préparer le brouillon').item.json.threadId }}` (18/10/2026), référence explicite demandée par le porteur pour éviter le contexte `$json` vide. Le faux identifiant `test-thread-1` ne permet pas de valider le rattachement ; test à faire avec un véritable `threadId` de conversation Gmail de test.
 - [ ] Import de `workflow_n8n_v2.json` dans n8n de test, vérification manuelle (voir A11 ci-dessus)
 
 ## Phase 1 : sécurité du contenu
@@ -81,3 +81,5 @@
 | 09/10/2026 | Mise en cohérence documentaire | PLAN.md et cahier des charges alignés sur les décisions validées ; aucun code ni workflow modifié | Plafond OpenAI de 10 €/mois à réévaluer avant le pilote après mesure des coûts réels à environ 150 mails/jour ; test de rédaction avec gpt-6-luna possible |
 | 15/10/2026 | Passage à Ollama local | `workflow_n8n_v2.json` migré vers Ollama (`llama3.2:3b`) ; AGENTS.md, PLAN.md, cahier des charges et guide mis à jour | OpenAI conservé comme option de production non décidée ; tests n8n à faire par le porteur ; A1 à A4 pas encore traitées |
 | 18/10/2026 | Tests n8n avec Ollama | Tri OK ; rédaction techniquement OK mais qualité insuffisante | Modèle de 3 milliards de paramètres trop faible pour un produit vendable ; comparaison de modèles à prévoir ; prochaine étape : A1 à A4 avec Codex |
+| 18/10/2026 | Phase 0 : corrections A1 à A4 | Destinataire corrigé, Wait supprimé, résumé séparé, threadId transmis ; JSON et connexions validés ; code de préparation vérifié sur données fictives | Base : `235d2ab` ; prompts et nœuds Ollama inchangés (`llama3.2:3b`, sans credential). Import n8n, tests Gmail et T1 à T13 non exécutés ici ; A11 reste partiel (création brouillon et temps total). Choix du modèle futur à décider après comparaison ; aucun changement de modèle dans cette étape |
+| 18/10/2026 | Retour de test et correction A4 | A1 et A3 validés par le porteur : brouillon créé sans Thread ID, résumé absent du corps. A4 : référence explicite au champ de « Préparer le brouillon » dans le nœud Gmail | Ancienne expression évaluée à vide dans l’interface ; identifiant utilisé : `test-thread-1` (fictif). JSON vérifié ; validation A4 en attente sur une vraie conversation du compte Gmail de test. A11 : création sans Thread ID confirmée, temps total restant à noter. Prompts, modèle et nœuds Ollama inchangés |

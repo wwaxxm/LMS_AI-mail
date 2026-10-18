@@ -132,7 +132,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const triage = $('Parser le tri').item.json;\nlet replyText = '';\ntry {\n  replyText = ($json.choices[0].message.content || '').trim();\n} catch (e) {\n  replyText = '';\n}\n\nconst draftBody = `[Résumé interne — ${(triage.urgency || 'normale').toUpperCase()}] ${triage.summary || ''}\\n\\n---\\n\\n${replyText}`;\n\nreturn {\n  json: {\n    draftBody,\n    subject: `Re : ${triage.originalSubject || ''}`,\n    to: triage.originalFrom || '',\n    threadId: triage.threadId || ''\n  }\n};"
+        "jsCode": "const triage = $('Parser le tri').item.json;\nlet replyText = '';\ntry {\n  replyText = ($json.choices[0].message.content || '').trim();\n} catch (e) {\n  replyText = '';\n}\n\nconst draftBody = replyText;\nconst internalSummary = `[Résumé interne — ${(triage.urgency || 'normale').toUpperCase()}] ${triage.summary || ''}`;\n\nreturn {\n  json: {\n    draftBody,\n    internalSummary,\n    subject: `Re : ${triage.originalSubject || ''}`,\n    to: triage.originalFrom || '',\n    threadId: triage.threadId || ''\n  }\n};"
       },
       "id": "c56d6fb1-f421-4234-9102-ffd64afeef47",
       "name": "Préparer le brouillon",
@@ -149,7 +149,8 @@
         "subject": "={{ $json.subject }}",
         "message": "={{ $json.draftBody }}",
         "options": {
-          "sendTo": "=={{ $json.to }}"
+          "sendTo": "={{ $json.to }}",
+          "threadId": "={{ $json.threadId }}"
         }
       },
       "id": "c412c808-fb3b-4c7b-b39a-2fd3db919478",
@@ -178,20 +179,6 @@
         2368,
         1888
       ]
-    },
-    {
-      "parameters": {
-        "amount": 30
-      },
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [
-        2368,
-        1712
-      ],
-      "id": "b5c2c040-afa9-4b2a-9651-c0c1264c04a9",
-      "name": "Wait",
-      "webhookId": "937b0410-287a-47fb-8712-6607c145c5ae"
     }
   ],
   "connections": {
@@ -232,7 +219,7 @@
       "main": [
         [
           {
-            "node": "Wait",
+            "node": "Appel Ollama - Rédaction",
             "type": "main",
             "index": 0
           }
@@ -262,17 +249,6 @@
         [
           {
             "node": "Créer le brouillon Gmail",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait": {
-      "main": [
-        [
-          {
-            "node": "Appel Ollama - Rédaction",
             "type": "main",
             "index": 0
           }
