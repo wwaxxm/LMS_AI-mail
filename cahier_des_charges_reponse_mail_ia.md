@@ -198,6 +198,8 @@ L'ambition est maintenant de :
 ### 8.3 Choix des modèles
 **Décision prise** : Ollama en local (`llama3.2:3b`) pour le développement et les tests de la v2, car l'API OpenAI du porteur n'avait pas de crédit. Le fournisseur de **production** n'est pas décidé. OpenAI (`gpt-6-luna`, `gpt-6.1-sol`) reste une option étudiée. Gemini reste la référence v1 uniquement.
 
+**Stratégie du 19/10/2026** : figer la logique du workflow avec `llama3.2:3b` (règles de rédaction et de mise en page dans `REGLES_REDACTION.md`, appliquées surtout par le code), puis passer à une API payante avant le pilote en rejouant la même recette. `qwen2.5:7b` a été écarté en local : sur ce PC (CPU seul, Docker), l'appel de rédaction a été coupé par le timeout de 180 s (environ 0,5 token/s d'après les logs, estimation).
+
 | Usage | Modèle | Remarque |
 |---|---|---|
 | Version d'origine (v1) | `gemini-3.7-flash` (tri et rédaction) | Conservée comme référence |
@@ -330,7 +332,7 @@ Règles :
 5. **Langues** : français et anglais ; réponse dans la langue du mail. Toute autre langue = escalade humaine sans brouillon (T7).
 6. **LMS_AI_Agency** : produit indépendant, hors périmètre du projet de réponse aux mails. L'Annexe B est conservée pour mémoire, sans rattachement prévu.
 7. **Expérience en code du porteur** : intermédiaire.
-8. **Modèle IA** : Ollama local (`llama3.2:3b`) pour le développement et les tests de la v2. Fournisseur de production non décidé (Ollama sur serveur, OpenAI ou autre) : à trancher après mesure de la qualité, de la vitesse et du coût ; les conditions de traitement des données du fournisseur retenu restent à vérifier (EJ-02). Gemini = référence v1 uniquement. Les appels restent à tester dans n8n avec de faux mails (A11).
+8. **Modèle IA** : Ollama local (`llama3.2:3b`) pour le développement et les tests de la v2. Fournisseur de production non décidé (Ollama sur serveur, OpenAI ou autre) : à trancher après mesure de la qualité, de la vitesse et du coût ; les conditions de traitement des données du fournisseur retenu restent à vérifier (EJ-02). Gemini = référence v1 uniquement. Les appels restent à tester dans n8n avec de faux mails (A11). Stratégie du 19/10/2026 : `llama3.2:3b` jusqu'à la fin des phases 1 à 3, puis API payante avant le pilote (voir 8.3).
 9. **Tests** : uniquement de faux mails, y compris des mails inspirés de mails réels mais anonymisés, sur un compte Gmail de test. Jamais la vraie boîte ; « exemples » désigne ces données de test.
 10. **Alertes** : canal séparé ; l'accès Gmail n'a pas le droit d'envoyer, y compris les alertes (ES-01). En phase 2, proposer 2 ou 3 options puis faire valider le choix du canal.
 11. **Budget** : sans objet en test local ; si la production utilise un service payant, plafond de 10 €/mois à réévaluer avant le pilote.

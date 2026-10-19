@@ -1,6 +1,6 @@
 # Reprise du projet depuis un autre appareil
 
-État au 19 octobre 2026. Dépôt privé : https://github.com/wwaxxm/LMS_AI-mail, branche `main`.
+État au 19 octobre 2026. Dépôt : https://github.com/wwaxxm/LMS_AI-mail, branche `main` (doit être privé ; visibilité à vérifier, il a pu être cloné sans identifiants le 19/10/2026).
 
 ## Projet et règles
 
@@ -13,26 +13,22 @@ Assistant de mails Gmail développé dans n8n avec Ollama local sur Windows ARM,
 - A11 : exécution complète #15 du 19/10/2026 à 01:37:16 (Europe/Paris), statut Succeeded, durée 41,548 s ; deux vrais appels Ollama. Premier appel après inactivité inconnu. Qualité française encore insuffisante.
 - L’export local `workflow_n8n_v2.json` contient encore `={{ $json.threadId }}` : il n’est pas aligné sur cette correction dans l’interface. Aucun remplacement de l’export n’a été effectué.
 
-## Comparaison de modèles interrompue
+## Comparaison de modèles : close (19/10/2026)
 
-Le porteur a fourni quatre faux mails : devis, horaires, réclamation et injection T5 avec remise de 90 % et IBAN factice. Ils sont conservés dans `faux_mails_comparaison_modeles.json`, avec les résultats attendus.
+Un essai `qwen2.5:7b` sur le faux devis : tri valide (`is_client: true`, `urgency: normale`), rédaction jamais obtenue. Les logs Ollama montrent un appel terminé en erreur 500 après exactement 3 min 0 s, soit le timeout de 180 s de n8n, avec environ 90 tokens générés (environ 0,5 token/s, estimation). Les 5 essais automatiques expliquent la durée de plus de 5 min. Ollama tourne sur CPU seul ; la mémoire n'était pas saturée (limite 15,4 Go). L'indisponibilité de n8n suit un redémarrage (SIGTERM) ; sa cause n'est pas établie.
 
-Seuls les deux champs `model` des appels de tri et de rédaction ont été temporairement changés vers `qwen2.5:7b`. Les prompts, max_tokens, timeout de 180000 ms et reprises automatiques sont restés inchangés. Pour préserver le texte complet, notamment l’injection T5 qui pourrait être coupée dans `snippet`, le faux devis complet a été épinglé au Gmail Trigger. L’exécution s’arrêtait au nœud Rédaction : aucun brouillon Gmail n’a été créé par cet essai.
-
-Résultat Qwen sur le devis : tri JSON valide, `is_client: true`, `urgency: normale`. Aucune rédaction obtenue avant la demande d’arrêt. Dernière durée observée pendant l’exécution : 5 min 23 s ; ce n’est ni la durée finale ni celle de la seule rédaction. Une notification « Execution stopped » a été vue. Aucun message d’erreur de timeout n’a été constaté. n8n a ensuite affiché « Offline » et localhost est devenu inaccessible ; la cause n’est pas établie. `docker stats --no-stream` est aussi resté sans réponse et a été interrompu.
-
-Relevés ponctuels Windows : CPU 43 puis 75 %, mémoire libre de 3,77 à 5,27 Gio sur 31,57 Gio. Ils ne prouvent pas une saturation Docker. Les trois autres essais Qwen et les quatre essais Llama n’ont pas été exécutés. Détails et réponse brute du tri dans `resultats_comparaison_modeles_2026-10-19.json`.
+Décision : rester sur `llama3.2:3b`, ne pas relancer les sept essais restants. La comparaison de qualité se fera avec des API payantes (voir `PLAN.md`, « Bascule vers une API payante »). Détails de l'essai dans `resultats_comparaison_modeles_2026-10-19.json`.
 
 ## Première action à la reprise
 
-1. Vérifier que Docker et n8n répondent sur le PC, puis examiner l’état réel de l’exécution interrompue.
-2. **Restauration non confirmée :** remettre `llama3.2:3b` dans les deux appels Ollama et retirer le faux devis épinglé au Gmail Trigger. Vérifier la sauvegarde ; ne pas publier le workflow pendant les essais.
-3. Reprendre la comparaison des quatre textes complets avec les mêmes prompts. Garder le timeout à 180 s et distinguer durée par appel, reprises et durée totale. Vérifier JSON, classement, français, engagements inventés, placeholders et résistance T5. Une réclamation doit être escaladée sans brouillon : cette protection reste à implémenter en phase 1.
-4. Consigner chaque résultat réel face à l’attendu ; ne pas valider les sept essais manquants par extrapolation. Ne pas choisir définitivement un modèle avant comparaison.
+1. Vérifier que Docker et n8n répondent.
+2. **Restauration non confirmée :** remettre `llama3.2:3b` dans les deux appels Ollama, retirer le faux devis épinglé au Gmail Trigger, ne pas publier le workflow.
+3. Passer le dépôt GitHub en privé si ce n'est pas fait.
+4. Suivre l'ordre de « Prochaine action » dans `PLAN.md` : phase 1a (sécurité), phase 1b (rédaction, `REGLES_REDACTION.md`), recette, phases 2 et 3, gel de la version Llama, bascule API.
 
 ## Accès depuis le cloud
 
-Un chat cloud peut reprendre le contexte et travailler sur le dépôt privé si la connexion GitHub donne accès à ce dépôt. `localhost:5678` désigne le PC d’origine ; cette adresse ne donne pas accès à n8n depuis le cloud. Les essais locaux nécessitent le PC allumé et une connexion distante autorisée, ou des résultats fournis par le porteur. Aucun identifiant ni mot de passe n’est inclus dans ce document.
+Un chat cloud peut reprendre le contexte et travailler sur le dépôt si la connexion GitHub donne accès à ce dépôt. `localhost:5678` désigne le PC d’origine ; cette adresse ne donne pas accès à n8n depuis le cloud. Les essais locaux nécessitent le PC allumé et une connexion distante autorisée, ou des résultats fournis par le porteur. Aucun identifiant ni mot de passe n’est inclus dans ce document.
 
 ## Preuves conservées
 

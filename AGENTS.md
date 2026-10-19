@@ -10,6 +10,7 @@ Implémentation actuelle : workflow n8n (Gmail + modèle IA local Ollama via HTT
 - `cahier_des_charges_reponse_mail_ia.md` : exigences (EF-xx, ES-xx, EJ-xx), anomalies (A1 à A11), tests (T1 à T13).
 - `workflow_n8n_v1_original.json` : workflow d'origine. **Ne jamais le modifier.**
 - `workflow_n8n_v2.json` : version de travail.
+- `REGLES_REDACTION.md` : règles de rédaction et de mise en page des brouillons (spécification à appliquer).
 
 ## Méthode de travail
 1. En début de session : lis PLAN.md et dis-moi en 5 lignes où on en est.
@@ -28,7 +29,7 @@ Implémentation actuelle : workflow n8n (Gmail + modèle IA local Ollama via HTT
   Les secrets restent dans les credentials n8n ou dans des variables d'environnement.
 - Ne lis jamais les fichiers `.env`, les identifiants, ni rien hors du dossier du projet.
 - Ne lance aucune commande qui supprime des données (volumes Docker, dossiers, modèles Ollama) sans mon accord explicite.
-- Ne fais aucun `git push` ni `git commit` sans mon accord. Le dépôt GitHub est privé et ne doit jamais contenir de clé.
+- Ne fais aucun `git push` ni `git commit` sans mon accord. Le dépôt GitHub doit être privé (à vérifier) et ne doit jamais contenir de clé, d'adresse mail réelle ni de capture d'écran contenant des données personnelles.
 - Tout mail sensible (réclamation, juridique, paiement, litige, colère, doute) : aucun brouillon généré, escalade humaine.
 - Le modèle ne doit jamais inventer prix, délais ou engagements.
 - Tests uniquement avec de faux mails et un compte Gmail de test, jamais la vraie boîte.
@@ -54,6 +55,13 @@ Implémentation actuelle : workflow n8n (Gmail + modèle IA local Ollama via HTT
 - Le fournisseur de **production** n'est pas décidé (Ollama sur un serveur, OpenAI, autre) : c'est une décision du porteur. Propose, ne change pas seul. OpenAI (`gpt-6-luna`, `gpt-6.1-sol`) reste une option documentée dans le cahier des charges (section 8.3), non utilisée aujourd'hui.
 - La version d'origine sur Gemini est conservée dans `workflow_n8n_v1_original.json`.
 - Si la production utilise un service payant : appels facturés au token, avec plafond de dépenses.
+
+## Stratégie IA et rédaction des brouillons
+- Stratégie du 19/10/2026 : figer la logique du workflow avec `llama3.2:3b`, puis passer à une API payante avant le pilote. `qwen2.5:7b` est trop lent en local sur ce PC : ne le propose pas.
+- Applique `REGLES_REDACTION.md` : le modèle n'écrit que le cœur du message ; formule d'appel, politesse et signature viennent du code ; des contrôles automatiques bloquent les brouillons invalides.
+- Écris prompts et code pour qu'ils restent valables avec une API : format OpenAI Chat Completions, aucune astuce propre à `llama3.2:3b` dans la logique, fournisseur isolé dans les nœuds HTTP.
+- Local : 2 essais automatiques au plus sur les appels Ollama (5 essais de 180 s peuvent bloquer n8n environ 15 minutes). Ne l'applique qu'avec l'accord du porteur.
+- Ne pousse rien sur GitHub, ne publie pas le workflow dans n8n et ne modifie pas n8n toi-même : le porteur importe et teste.
 
 ## Tests
 - Jeu de tests T1 à T13 du cahier des charges (section 10), à rejouer après chaque modification.

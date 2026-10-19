@@ -150,7 +150,7 @@
         "message": "={{ $json.draftBody }}",
         "options": {
           "sendTo": "={{ $json.to }}",
-          "threadId": "={{ $json.threadId }}"
+          "threadId": "={{ $('Préparer le brouillon').item.json.threadId }}"
         }
       },
       "id": "c412c808-fb3b-4c7b-b39a-2fd3db919478",
