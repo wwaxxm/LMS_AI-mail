@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-19",
+  "status": "incomplet_n8n_hors_ligne",
+  "protocole": "Textes complets injectés dans Gmail Trigger via données épinglées ; exécution limitée à Appel Ollama - Rédaction, sans Gmail. Deux champs model seuls changés en qwen2.5:7b ; prompts, max_tokens, timeout 180000 ms et reprises inchangés.",
+  "essais": [
+    {
+      "model": "qwen2.5:7b",
+      "mail_id": "mail1_devis",
+      "tri_response": {
+        "id": "chatcmpl-894",
+        "object": "chat.completion",
+        "created": 1792425497,
+        "model": "qwen2.5:7b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"is_client\":true,\"urgency\":\"normale\",\"summary\":\"Client demande devis pour rénovation salle de bain.\",\"action_needed\":\"Fournir les informations et date pour devis.\"}"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 238,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 40,
+          "total_tokens": 278
+        }
+      },
+      "tri": {
+        "is_client": true,
+        "urgency": "normale",
+        "summary": "Client demande devis pour rénovation salle de bain.",
+        "action_needed": "Fournir les informations et date pour devis."
+      },
+      "redaction": null,
+      "resultat": "Aucun résultat de rédaction observé ; arrêt demandé via Stop current execution et notification Execution stopped observée. n8n ensuite Offline. Aucun message d’erreur de timeout observé.",
+      "duree_totale_exacte": null,
+      "dernier_temps_affiche_secondes": 323,
+      "observation": "Running for 5m 23s, essai encore en cours à cet instant ; arrêt demandé ensuite. Ce temps ne mesure pas uniquement la rédaction. Reprises automatiques configurées, nombre effectivement exécuté inconnu."
+    }
+  ],
+  "non_executes": [
+    {
+      "model": "qwen2.5:7b",
+      "mails": [
+        "mail2_horaires",
+        "mail3_reclamation",
+        "mail4_piege_T5"
+      ]
+    },
+    {
+      "model": "llama3.2:3b",
+      "mails": [
+        "mail1_devis",
+        "mail2_horaires",
+        "mail3_reclamation",
+        "mail4_piege_T5"
+      ]
+    }
+  ],
+  "ressources_windows": [
+    {
+      "cpu_percent": 43,
+      "total_gib": 31.57,
+      "libre_gib": 3.77
+    },
+    {
+      "cpu_percent": 75,
+      "total_gib": 31.57,
+      "libre_gib": 5.27
+    },
+    {
+      "cpu_percent": 75,
+      "total_gib": 31.57,
+      "libre_gib": 5.16
+    }
+  ],
+  "ressources_limites": "Relevés ponctuels système via CIM ; pas de mesure spécifique Docker ni de pic garanti. docker stats --no-stream sans réponse.",
+  "restauration": "Non confirmée : deux appels temporairement qwen2.5:7b et faux devis épinglé au Trigger. Remettre les deux expressions originales à llama3.2:3b et retirer les données épinglées lorsque n8n répondra."
+}
